@@ -32,7 +32,6 @@ export const getAllProjects = async (req, res) => {
         const loggedInUser = await userModal.findOne({ email: req.user.email });
 
         const allUserProjects = await projectService.getAllProjectByUserId(loggedInUser._id);
-        console.log("**************allUserProjects***********", allUserProjects);
 
         return res.status(200).json({ projects: allUserProjects });
     } catch (error) {
