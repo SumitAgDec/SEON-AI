@@ -1,12 +1,16 @@
-import React, { useContext } from "react";
+import React, { useContext, useEffect } from "react";
 import { UserContext, useUser } from "../context/user.context";
 import { useState } from "react";
 import axios from "../config/axios.js";
+import { useNavigate } from "react-router-dom";
 
 function Home() {
   const { user } = useUser();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [projectName, setProjectName] = useState("");
+  const [project, setProject] = useState([]);
+
+  const navigate = useNavigate();
 
   function createProject(e) {
     e.preventDefault();
@@ -21,15 +25,47 @@ function Home() {
       .catch((err) => console.error(err));
   }
 
+  useEffect(() => {
+    axios
+      .get("/projects/all")
+      .then((res) => {
+        setProject(res.data.projects);
+      })
+      .catch((err) => console.error(err));
+  }, []);
+
   return (
     <main className="p-4">
-      <div className="projects">
+      <div className="projects flex flex-wrap gap-3">
         <button
           onClick={() => setIsModalOpen(true)}
           className="project p-4 border border-slate-300 rounded-md"
         >
           New Project<i className="ri-link ml-2"></i>
         </button>
+
+        {project.map((project) => (
+          <div
+            key={project._id}
+            onClick={() =>
+              navigate(`/project`, {
+                state: { project },
+              })
+            }
+            className="project flex flex-col cursor-pointer  p-4 border border-slate-300 rounded-md min-w-52 hover:bg-slate-200"
+          >
+            <h2 className="font-semibold">{project.name}</h2>
+            <div>
+              {" "}
+              <p>
+                <small>
+                  <i className="ri-user-line"></i> collaborators
+                </small>{" "}
+                : {project.users.length}
+              </p>
+            </div>
+          </div>
+        ))}
       </div>
       {isModalOpen && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
