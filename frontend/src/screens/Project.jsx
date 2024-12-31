@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import axios from "../config/axios.js";
 import {
@@ -19,31 +19,45 @@ function Project({ state }) {
 
   const { user } = useContext(UserContext);
 
+  const messageBox = useRef(null);
+
   useEffect(() => {
+    // Initialize the socket
     initilizeSocket(project._id);
 
-    receiveMessage("project-message", (data) => {
-      console.log(data);
-    });
+    const handleIncomingMessage = (data) => {
+      console.log("Received message:", data);
+      appendIncomingMessage(data);
+    };
 
+    // Add the listener
+    receiveMessage("project-message", handleIncomingMessage);
+
+    // Fetch project details
     axios
       .get(`projects/get-project/${location.state.project._id}`)
       .then((res) => {
-        console.log(res.data.project);
+        console.log("Fetched project:", res.data.project);
         setProject(res.data.project);
       })
       .catch((err) => {
-        console.log("Error !", err.message);
+        console.error("Error fetching project:", err.message);
       });
 
+    // Fetch users
     axios
       .get("api/users/all")
       .then((res) => {
         setUsers(res.data.users);
       })
       .catch((err) => {
-        console.log("Error !", err.message);
+        console.error("Error fetching users:", err.message);
       });
+
+    // Cleanup to remove duplicate listeners
+    return () => {
+      receiveMessage("project-message", handleIncomingMessage, true); // Remove listener
+    };
   }, []);
 
   const handleUserClick = (userId) => {
@@ -54,66 +68,126 @@ function Project({ state }) {
       } else {
         newSelectedUserId.add(userId);
       }
-      return newSelectedUserId;
+      return Array.from(newSelectedUserId);
     });
-    // setIsModalOpen(false);
   };
 
   function addCollaborators() {
     axios
       .put("projects/add-user", {
         projectId: location.state.project._id,
-        users: Array.from(selectedUserId),
+        users: selectedUserId,
       })
       .then((res) => {
-        console.log(res.data);
+        console.log("Added collaborators:", res.data);
         setIsModalOpen(false);
       })
       .catch((err) => {
-        console.log("Error !", err.message);
+        console.error("Error adding collaborators:", err.message);
       });
   }
 
+  function appendIncomingMessage(messageObject) {
+    if (messageBox.current) {
+      const message = document.createElement("div");
+      message.classList.add(
+        "message",
+        "max-w-56",
+        "flex",
+        "flex-col",
+        "p-2",
+        "bg-slate-50",
+        "w-fit",
+        "rounded-md"
+      );
+      message.innerHTML = `
+        <small class="opacity-65 text-xs">${
+          messageObject.sender.user.email || "Unknown Sender"
+        }</small>
+        <p class="text-sm">${messageObject.message}</p>
+      `;
+
+      messageBox.current.appendChild(message);
+
+      scrollToBottom();
+    } else {
+      console.error("Message box element not found!");
+    }
+  }
+
+  function appendOutgoingMessage(messageObject) {
+    if (messageBox.current) {
+      const message = document.createElement("div");
+      message.classList.add(
+        "ml-auto",
+        "message",
+        "max-w-56",
+        "flex",
+        "flex-col",
+        "p-2",
+        "bg-slate-50",
+        "w-fit",
+        "rounded-md"
+      );
+      message.innerHTML = `
+        <small class="opacity-65 text-xs">${
+          messageObject.sender.user.email || "Unknown Sender"
+        }</small>
+        <p class="text-sm">${messageObject.message}</p>
+      `;
+
+      messageBox.current.appendChild(message);
+      scrollToBottom();
+    } else {
+      console.error("Message box element not found!");
+    }
+  }
+
   function send() {
-    console.log(user);
-    sendMessage("project-message", {
+    const messageObject = {
       message,
-      sender: user._id,
-    });
+      sender: user,
+    };
+
+    // Send the message to the server.
+    sendMessage("project-message", messageObject);
+
+    // Append the message to the local message box.
+    appendOutgoingMessage(messageObject);
 
     setMessage("");
   }
 
-  // console.log(location.state);
+  function scrollToBottom() {
+    messageBox.current.scrollTop = messageBox.current.scrollHeight;
+  }
+
   return (
     <main className="h-screen w-full flex">
-      <section className="left flex flex-col h-full min-w-96 bg-slate-300 relative">
-        <header className="flex justify-between items-center p-2 px-4 w-full bg-slate-100">
-          <button className="flex gap-2 " onClick={() => setIsModalOpen(true)}>
+      <section className="left flex flex-col h-screen min-w-96 bg-slate-300 relative">
+        <header className="flex justify-between items-center p-2 px-4 w-full bg-slate-100 absolute top-0">
+          <button className="flex gap-2" onClick={() => setIsModalOpen(true)}>
             <i className="ri-add-large-fill mr-1"></i>
             Add collaborators
           </button>
           <button
             onClick={() => setIsSidePanelOpen(!isSidePanelOpen)}
-            className="p-2 "
+            className="p-2"
           >
             <i className="ri-group-fill"></i>
           </button>
         </header>
 
-        <div className="conversation-area flex-grow flex flex-col">
-          <div className="message-box p-1 flex-grow flex flex-col gap-1">
-            <div className="message max-w-56 flex flex-col p-2 bg-slate-50 w-fit rounded-md">
-              <small className="opacity-65 text-sm">example@gamil.com</small>
-              <p className="text-sm">Lorem ipsum dolor sit amet.</p>
-            </div>
-            <div className="ml-auto max-w-56 message flex flex-col p-2 bg-slate-50 w-fit rounded-md">
-              <small className="opacity-65 text-sm">example@gamil.com</small>
-              <p className="text-sm">Lorem ipsum dolor sit amet.</p>
-            </div>
-          </div>
+        <div className="conversation-area pt-14 pb-10 flex-grow flex flex-col relative">
+          <div
+            ref={messageBox}
+            className="message-box p-1 flex-grow flex flex-col gap-1 overflow-y-auto max-h-full"
+            style={{
+              maxHeight: "calc(100vh - 96px)", // Adjust the height to fit within the screen, considering the header and input area
+            }}
+          ></div>
 
-          <div className="inputField w-full flex ">
+          <div className="inputField absolute bottom-0 w-full flex">
             <input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -140,19 +214,19 @@ function Project({ state }) {
           </header>
 
           {project.users &&
-            project.users.map((user) => {
-              return (
-                <div className="users flex flex-col gap-2 cursor-pointer hover:bg-slate-200 p-2 ">
-                  <div className="user flex gap-2 items-center">
-                    <div className="aspect-square rounded-full w-fit h-fit flex items-center justify-center p-4 text-white bg-slate-600">
-                      <i className="ri-user-fill absolute"></i>
-                    </div>
-
-                    <h1 className="font-semibold text-lg">{user.email}</h1>
+            project.users.map((user) => (
+              <div
+                key={user._id}
+                className="users flex flex-col gap-2 cursor-pointer hover:bg-slate-200 p-2"
+              >
+                <div className="user flex gap-2 items-center">
+                  <div className="aspect-square rounded-full w-fit h-fit flex items-center justify-center p-4 text-white bg-slate-600">
+                    <i className="ri-user-fill absolute"></i>
                   </div>
+                  <h1 className="font-semibold text-lg">{user.email}</h1>
                 </div>
-              );
-            })}
+              </div>
+            ))}
         </div>
       </section>
 
@@ -168,11 +242,9 @@ function Project({ state }) {
             <div className="flex flex-col gap-2 mb-16 max-h-96 overflow-y-auto">
               {users.map((user) => (
                 <div
-                  key={user.id}
+                  key={user._id}
                   className={`user flex gap-2 items-center p-2 cursor-pointer hover:bg-slate-200 ${
-                    Array.from(selectedUserId).indexOf(user._id) !== -1
-                      ? "bg-slate-200"
-                      : ""
+                    selectedUserId.includes(user._id) ? "bg-slate-200" : ""
                   }`}
                   onClick={() => handleUserClick(user._id)}
                 >
