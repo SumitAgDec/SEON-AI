@@ -18,10 +18,33 @@ function Project({ state }) {
   const [project, setProject] = useState(location.state.project);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
+  const [fileTree, setFileTree] = useState({
+    "app.js": {
+      content: `const express = require('express')`,
+      "package.json": {
+        content: `{"name": "temp-server"}`,
+      },
+    },
+  });
 
   const { user } = useContext(UserContext);
 
   const messageBox = useRef(null);
+
+  function SyntaxHighlightedCode(props) {
+    const ref = useRef(null);
+
+    React.useEffect(() => {
+      if (ref.current && props.className?.includes("lang-") && window.hljs) {
+        window.hljs.highlightElement(ref.current);
+
+        // hljs won't reprocess the element unless this attribute is removed
+        ref.current.removeAttribute("data-highlighted");
+      }
+    }, [props.className, props.children]);
+
+    return <code {...props} ref={ref} />;
+  }
 
   useEffect(() => {
     // Initialize the socket
@@ -104,6 +127,23 @@ function Project({ state }) {
     setMessage("");
   }
 
+  function WriteAiMessage(message) {
+    const messageObject = JSON.parse(message);
+
+    return (
+      <div className="overflow-auto bg-slate-950 text-white rounded-sm p-2">
+        <Markdown
+          children={messageObject.text}
+          options={{
+            overrides: {
+              code: SyntaxHighlightedCode,
+            },
+          }}
+        />
+      </div>
+    );
+  }
+
   function scrollToBottom() {
     messageBox.current.scrollTop = messageBox.current.scrollHeight;
   }
@@ -145,13 +185,9 @@ function Project({ state }) {
                   {msg.sender.user.email || "Unknown Sender"}
                 </small>
                 <p className="text-sm">
-                  {msg.sender.user._id === "ai" ? (
-                    <div className="overflow-auto bg-slate-950 text-white rounded-md p-2">
-                      <Markdown>{msg.message}</Markdown>
-                    </div>
-                  ) : (
-                    msg.message
-                  )}
+                  {msg.sender.user._id === "ai"
+                    ? WriteAiMessage(msg.message)
+                    : msg.message}
                 </p>
               </div>
             ))}
@@ -199,6 +235,8 @@ function Project({ state }) {
             ))}
         </div>
       </section>
+
+      <sction className="right bg-red-50 flex-grow h-full"></sction>
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
