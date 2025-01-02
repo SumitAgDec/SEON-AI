@@ -7,6 +7,7 @@ import {
   sendMessage,
 } from "../config/socket.js";
 import { UserContext } from "../context/user.context.jsx";
+import Markdown from "markdown-to-jsx";
 
 function Project({ state }) {
   const location = useLocation();
@@ -16,6 +17,7 @@ function Project({ state }) {
   const [users, setUsers] = useState([]);
   const [project, setProject] = useState(location.state.project);
   const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState([]);
 
   const { user } = useContext(UserContext);
 
@@ -27,7 +29,7 @@ function Project({ state }) {
 
     const handleIncomingMessage = (data) => {
       console.log("Received message:", data);
-      appendIncomingMessage(data);
+      setMessages((prevMessages) => [...prevMessages, data]);
     };
 
     // Add the listener
@@ -87,62 +89,6 @@ function Project({ state }) {
       });
   }
 
-  function appendIncomingMessage(messageObject) {
-    if (messageBox.current) {
-      const message = document.createElement("div");
-      message.classList.add(
-        "message",
-        "max-w-56",
-        "flex",
-        "flex-col",
-        "p-2",
-        "bg-slate-50",
-        "w-fit",
-        "rounded-md"
-      );
-      message.innerHTML = `
-        <small class="opacity-65 text-xs">${
-          messageObject.sender.user.email || "Unknown Sender"
-        }</small>
-        <p class="text-sm">${messageObject.message}</p>
-      `;
-
-      messageBox.current.appendChild(message);
-
-      scrollToBottom();
-    } else {
-      console.error("Message box element not found!");
-    }
-  }
-
-  function appendOutgoingMessage(messageObject) {
-    if (messageBox.current) {
-      const message = document.createElement("div");
-      message.classList.add(
-        "ml-auto",
-        "message",
-        "max-w-56",
-        "flex",
-        "flex-col",
-        "p-2",
-        "bg-slate-50",
-        "w-fit",
-        "rounded-md"
-      );
-      message.innerHTML = `
-        <small class="opacity-65 text-xs">${
-          messageObject.sender.user.email || "Unknown Sender"
-        }</small>
-        <p class="text-sm">${messageObject.message}</p>
-      `;
-
-      messageBox.current.appendChild(message);
-      scrollToBottom();
-    } else {
-      console.error("Message box element not found!");
-    }
-  }
-
   function send() {
     const messageObject = {
       message,
@@ -153,7 +99,7 @@ function Project({ state }) {
     sendMessage("project-message", messageObject);
 
     // Append the message to the local message box.
-    appendOutgoingMessage(messageObject);
+    setMessages((prevMessages) => [...prevMessages, messageObject]);
 
     setMessage("");
   }
@@ -185,7 +131,31 @@ function Project({ state }) {
             style={{
               maxHeight: "calc(100vh - 96px)", // Adjust the height to fit within the screen, considering the header and input area
             }}
-          ></div>
+          >
+            {messages.map((msg, index) => (
+              <div
+                key={index}
+                className={`message  flex flex-col p-2 ${
+                  msg.sender.user._id == user._id && "ml-auto"
+                } bg-slate-50 w-fit rounded-md ${
+                  msg.sender.user._id === "ai" ? "max-w-80" : "max-w-54"
+                }`}
+              >
+                <small className="opacity-65 text-xs">
+                  {msg.sender.user.email || "Unknown Sender"}
+                </small>
+                <p className="text-sm">
+                  {msg.sender.user._id === "ai" ? (
+                    <div className="overflow-auto bg-slate-950 text-white rounded-md p-2">
+                      <Markdown>{msg.message}</Markdown>
+                    </div>
+                  ) : (
+                    msg.message
+                  )}
+                </p>
+              </div>
+            ))}
+          </div>
 
           <div className="inputField absolute bottom-0 w-full flex">
             <input
